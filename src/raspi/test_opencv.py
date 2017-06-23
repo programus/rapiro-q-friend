@@ -12,8 +12,8 @@ import cv2
 
 
 def detect(img, cascade):
-    rects = cascade.detectMultiScale(img, scaleFactor=1.3, minNeighbors=4,
-                                     minSize=(30, 30),
+    rects = cascade.detectMultiScale(img, scaleFactor=1.3, minNeighbors=3,
+                                     minSize=(10, 10),
                                      flags=cv2.CASCADE_SCALE_IMAGE)
     if len(rects) == 0:
         return []
