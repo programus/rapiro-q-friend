@@ -5,8 +5,11 @@ from __future__ import print_function
 
 import os
 import os.path
+import Queue
+import threading
 from picamera import PiCamera
 from picamera.array import PiRGBArray
+import numpy as np
 import time
 import cv2
 
@@ -27,12 +30,41 @@ def draw_rects(img, rects, color):
 
 
 def draw_str(img, text, position, color):
-  cv2.putText(image, 'fps: %f' % (fps), position, cv2.FONT_HERSHEY_PLAIN,
+  cv2.putText(image, text, position, cv2.FONT_HERSHEY_PLAIN,
               1.0, color, lineType=cv2.LINE_AA)
 
 
+def detect_and_show(q, cascade, start_time):
+  prev = start_time
+  while True:
+    image = q.get()
+    gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
+    gray = cv2.equalizeHist(gray)
+
+    print('detect start')
+    now = time.time()
+    rects = detect(gray, cascade)
+    print('detected %d faces %f' % (len(rects), time.time() - now))
+    draw_rects(image, rects, (0, 255, 0))
+
+    now = time.time()
+    fps = (1 / (now - prev))
+    fps_msg = 'fps: %.2f' % (fps)
+    print(fps_msg)
+    draw_str(image, fps_msg, (0, 20), (0, 255, 0))
+    prev = now
+    q.task_done()
+    if is_x_started:
+      cv2.imshow('Frame', image)
+      key = cv2.waitKey(1) & 0xFF
+
+      if key == ord('q'):
+        cv2.destroyAllWindows()
+        break
+
+
 if __name__ == '__main__':
-  size = (400, 304)
+  size = (320, 240)
   is_x_started = os.environ.get('DISPLAY')
   with PiCamera() as camera:
     camera.resolution = size
@@ -44,31 +76,26 @@ if __name__ == '__main__':
       cascade = cv2.CascadeClassifier(cascade_fn)
       print('detector prepared.')
 
-      prev = time.time()
+      q = Queue.Queue(maxsize=1)
+      t = threading.Thread(target=lambda:
+                           detect_and_show(q, cascade, time.time()))
+      t.daemon = True
+      t.start()
+
+      image = None
+
       for frame in camera.capture_continuous(
         rawCapture, format='bgr', use_video_port=True
       ):
-        image = frame.array
-        gray = cv2.cvtColor(image, cv2.COLOR_RGB2GRAY)
-        gray = cv2.equalizeHist(gray)
-
-        print('detect start')
-        now = time.time()
-        rects = detect(gray, cascade)
-        print('detected %d faces %f' % (len(rects), time.time() - now))
-        draw_rects(image, rects, (0, 255, 0))
-
-        now = time.time()
-        fps = (1 / (now - prev))
-        fps_msg = 'fps: %.2f' % (fps)
-        print(fps_msg)
-        draw_str(image, fps_msg, (0, 20), (0, 255, 0))
-        prev = now
-        if is_x_started:
-          cv2.imshow('Frame', image)
-          key = cv2.waitKey(1) & 0xFF
-
-          if key == ord('q'):
+        if image is not None:
+          image[:] = frame.array[:]
+        else:
+          image = np.array(frame.array, copy=True)
+        try:
+          q.put(image, timeout=0.2)
+        except:
+          print('image process timeout')
+          if not t.isAlive():
             break
 
         rawCapture.truncate(0)
