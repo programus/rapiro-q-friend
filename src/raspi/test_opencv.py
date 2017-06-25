@@ -12,22 +12,28 @@ import cv2
 
 
 def detect(img, cascade):
-    rects = cascade.detectMultiScale(img, scaleFactor=1.3, minNeighbors=3,
-                                     minSize=(10, 10),
-                                     flags=cv2.CASCADE_SCALE_IMAGE)
-    if len(rects) == 0:
-        return []
-    rects[:, 2:] += rects[:, :2]
-    return rects
+  rects = cascade.detectMultiScale(img, scaleFactor=1.1, minNeighbors=3,
+                                   minSize=(10, 10),
+                                   flags=cv2.CASCADE_SCALE_IMAGE)
+  if len(rects) == 0:
+      return []
+  rects[:, 2:] += rects[:, :2]
+  return rects
 
 
 def draw_rects(img, rects, color):
-    for x1, y1, x2, y2 in rects:
-        cv2.rectangle(img, (x1, y1), (x2, y2), color, 2)
+  for x1, y1, x2, y2 in rects:
+      cv2.rectangle(img, (x1, y1), (x2, y2), color, 1)
+
+
+def draw_str(img, text, position, color):
+  cv2.putText(image, 'fps: %f' % (fps), position, cv2.FONT_HERSHEY_PLAIN,
+              1.0, color, lineType=cv2.LINE_AA)
 
 
 if __name__ == '__main__':
-  size = (320, 240)
+  size = (400, 304)
+  is_x_started = os.environ.get('DISPLAY')
   with PiCamera() as camera:
     camera.resolution = size
     camera.framerate = 12
@@ -54,14 +60,18 @@ if __name__ == '__main__':
 
         now = time.time()
         fps = (1 / (now - prev))
-        print('fps: %f' % (fps))
-        cv2.putText(image, 'fps: %f' % (fps), (20, 20), cv2.FONT_HERSHEY_PLAIN,
-                    1.0, (0, 255, 0), lineType=cv2.LINE_AA)
+        fps_msg = 'fps: %.2f' % (fps)
+        print(fps_msg)
+        draw_str(image, fps_msg, (0, 20), (0, 255, 0))
         prev = now
-        cv2.imshow('Frame', image)
-        key = cv2.waitKey(1) & 0xFF
+        if is_x_started:
+          cv2.imshow('Frame', image)
+          key = cv2.waitKey(1) & 0xFF
+
+          if key == ord('q'):
+            break
 
         rawCapture.truncate(0)
 
-        if key == ord('q'):
-          break
+      if is_x_started:
+        cv2.destroyAllWindows()
